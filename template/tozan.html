@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head prefix="og: http://ogp.me/ns#">
+<meta charset="UTF-8">
+<meta name="description" content="[% description %]">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:site" content="@anineco_org">
+<meta property="og:title" content="[% title %]">
+<meta property="og:type" content="article">
+<meta property="og:image" content="https://anineco.org/[% cid %]/2x/[% cover %].jpg">
+<meta property="og:url" content="https://anineco.org/[% cid %].html">
+<meta property="og:description" content="[% description %]">
+<meta property="og:site_name" content="あにねこ登山日誌">
+<title>[% title %]</title>
+<link rel="canonical" href="https://anineco.org/[% cid %].html">
+<link rel="stylesheet" href="css/tozan.css">
+<script type="module" src="js/tozan.js"></script>
+<script type="application/ld+json">
+{
+"@context":"http://schema.org/",
+"@type":"BlogPosting",
+"headline":"[% title %]",
+"temporalCoverage":"[% datespan %]",
+"datePublished":"[% pubdate %]",
+"author":{"@type":"Person","name":"あにねこ"},
+"image":[
+"https://anineco.org/[% cid %]/W[% cover %].jpg",
+"https://anineco.org/[% cid %]/F[% cover %].jpg",
+"https://anineco.org/[% cid %]/Q[% cover %].jpg"
+]}
+</script>
+</head>
+<body>
+<div id="container">
+<main>
+<article>
+<h1>[% title %]</h1>
+[% IF date.start == date.end -%]
+<div><time datetime="[% date.start %]">[% datejp.start %]</time></div>
+[% ELSE -%]
+<div><time datetime="[% date.start %]">[% datejp.start %]</time>〜<time datetime="[% date.end %]">[% datejp.end %]</time></div>
+[% END -%]
+[% FOREACH s IN section -%]
+[% IF loop.is_first -%]
+[% IF loop.size == 1 -%]
+<div>天気：<span style="color:red;">☀</span><span style="color:gray;">☁</span><span style="color:blue;">☂</span><span style="color:black;">☃</span></div>
+[% END -%]
+<div>メンバー：T</div>
+[% IF loop.size == 1 -%]
+<div>行程：[% s.timeline %]</div>
+<div class="routemap"><a href="routemap.html?lat=[% s.lat %]&amp;lon=[% s.lon %]&amp;zoom=[% s.zoom %]&amp;url=[% cid %]/[% s.url %]">ルート地図</a>
+GPSのログ（赤：往路、青：復路）を地理院地図に重ねて表示します。</div>
+[% END -%]
+<hr>
+[% END -%]
+[% IF loop.size > 1 -%]
+<p>本文</p>
+<div class="section">
+<h2>[% s.title %]</h2>
+[% IF date.start != date.end -%]
+<div>[% s.date %]</div>
+<div>天気：<span style="color:red;">☀</span><span style="color:gray;">☁</span><span style="color:blue;">☂</span><span style="color:black;">☃</span></div>
+[% END -%]
+<div>行程：[% s.timeline %]</div>
+<div class="routemap"><a href="routemap.html?lat=[% s.lat %]&amp;lon=[% s.lon %]&amp;zoom=[% s.zoom %]&amp;url=[% cid %]/[% s.url %]">ルート地図</a>
+GPSのログ（赤：往路、青：復路）を地理院地図に重ねて表示します。</div>
+</div>
+[% END -%]
+[% FOREACH i IN s.photo -%]
+<p>本文</p>
+<div class="photo">
+<figure><picture>
+<source type="image/avif" srcset="[% cid %]/[% i.base0 %].avif 1x,[% cid %]/2x/[% i.base0 %].avif 2x">
+<img src="[% cid %]/[% i.base0 %].jpg" srcset="[% cid %]/2x/[% i.base0 %].jpg 2x" width="[% i.w0 %]" height="[% i.h0 %]" alt="">
+</picture>
+<figcaption>[% i.cap0 %]</figcaption>
+</figure>
+<figure><picture>
+<source type="image/avif" srcset="[% cid %]/[% i.base1 %].avif 1x,[% cid %]/2x/[% i.base1 %].avif 2x">
+<img src="[% cid %]/[% i.base1 %].jpg" srcset="[% cid %]/2x/[% i.base1 %].jpg 2x" width="[% i.w1 %]" height="[% i.h1 %]" alt="">
+</picture>
+<figcaption>[% i.cap1 %]</figcaption>
+</figure>
+</div>
+[% END -%]
+[% END -%]
+<p>なんとか<span style="color:red;">♨</span>に立ち寄って帰った。</p>
+</article>
+</main>
+<footer>
+<hr>
+<small>あにねこ登山日誌 © [% lm_year %] <a href="https://anineco.org/">anineco.org</a></small>
+<nav>
+<a href=".">TOP</a>
+▶
+<a href="ch[% year %].html">山行記録（[% year %]年）</a>
+</nav>
+</footer>
+</div>
+</body>
+</html>
