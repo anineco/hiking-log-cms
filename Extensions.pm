@@ -4,7 +4,7 @@ use warnings;
 use utf8;
 sub icon {
   my $t = shift;
-# FIXME:
+# WORKAROUND: gpsbabel 1.9.0 drops 'extensions' tags in 'wpt' elements
   return (exists $t->{extensions} ? $t->{extensions}[0] : $t)->{'kashmir3d:icon'}[0];
 }
 sub line_color {
