@@ -1,4 +1,5 @@
 #!/usr/bin/env -S perl -CA
+# mkphoto.pl - batch convert photo size and format
 
 use strict;
 use warnings;
@@ -6,41 +7,32 @@ use utf8;
 use open qw(:utf8 :std);
 
 use Config::Tiny;
-use Data::Dumper;
-{
-  no warnings 'redefine';
-  *Data::Dumper::qquote = sub { return shift; };
-  $Data::Dumper::Useperl = 1;
-}
 use File::Basename;
 use JSON;
 
-#
-# 設定ファイルを読み込む
-#
+# load configuration file
 my $cf = Config::Tiny->read('config.ini');
 my $content = $cf->{_}->{content};
 my $material_gpx = $cf->{material}->{gpx};
 my $material_img = $cf->{material}->{img};
 
-#
-# コマンド行オプション
-#
+# parse command line argument
 if ($#ARGV < 0) {
   my $script = basename($0);
-  print STDERR "Usage: $script <CID>\n";
-  exit 1;
+  die "Usage: $script <CID>";
 }
-my $cid = $ARGV[0]; # コンテントID
+my $cid = $ARGV[0]; # content ID
 
 my $file = "$content/$cid.json";
-open my $in, '<:raw', $file or die "Can't open '$file' $!";
+open(my $in, '<:raw', $file) or die "Can't open $file: $!";
 my $text = do { local $/; <$in> };
-close $in;
-
+close($in);
 my $resource = decode_json($text);
 
-print <<'EOS';
+my $cmd = 'bash';
+open(my $out, '|-', $cmd) or die "Can't execute $cmd: $!";
+
+print $out <<'EOS';
 set -eu
 TMOZ=$(mktemp -d moz.XXXXXX)
 trap 'rm -rf $TMOZ' EXIT
@@ -71,30 +63,34 @@ function squoosh_crop () {
 }
 EOS
 
-my $C = 'R000'; # 🔖：RICOH GRⅢの場合
+# convert cover photo
 my $D = "$content/$cid";
 my $S = $resource->{cover}->{file};
 my $T = $resource->{cover}->{hash};
-my $P = dirname($S) . '/' . $C . (basename($S) =~ s/^S//r);
 
-print <<EOS;
+# NOTE: original aspect ratio is fixed to 4:3
+print $out <<EOS;
 mkdir -p $D/2x
 squoosh $S 120 90 $D/S$T
 squoosh $S 240 180 $D/2x/S$T
-squoosh_crop $P 320 180 $D/W$T
-squoosh_crop $P 320 240 $D/F$T
-squoosh_crop $P 240 240 $D/Q$T
+squoosh_crop $S 320 180 $D/W$T
+squoosh_crop $S 320 240 $D/F$T
+squoosh_crop $S 240 240 $D/Q$T
 EOS
 
+# convert other photos
+# NOTE: original aspect ratio is fixed to 3:2
 foreach my $sect (@{$resource->{section}}) {
   foreach my $img (@{$sect->{photo}}) {
     my $S = $img->{file};
     my $T = $img->{hash};
     my ($W, $H) = ($img->{width} > $img->{height}) ? (270, 180) : (180, 270);
-    print "squoosh $S $W $H $D/$T\n";
+    print $out "squoosh $S $W $H $D/$T\n";
     $W *= 2;
     $H *= 2;
-    print "squoosh $S $W $H $D/2x/$T\n";
+    print $out "squoosh $S $W $H $D/2x/$T\n";
   }
 }
+
+close($out);
 __END__
