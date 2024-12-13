@@ -1,19 +1,12 @@
 #!/usr/bin/env -S perl -CA
-
+# mkroutemap.pl - create geojson
 use strict;
 use warnings;
 use utf8;
 use open qw(:utf8 :std);
 
 use Config::Tiny;
-#use Data::Dumper;
-#{
-#  no warnings 'redefine';
-#  *Data::Dumper::qquote = sub { return shift; };
-#  $Data::Dumper::Useperl = 1;
-#}
 use File::Basename;
-use File::Slurp;
 use JSON;
 use XML::Simple qw(:strict);
 
@@ -23,17 +16,7 @@ use Extensions;
 use ToGeojson;
 require IconLut;
 
-#
-# 設定ファイルを読み込む
-#
-my $cf = Config::Tiny->read('config.ini');
-my $content = $cf->{_}->{content};
-my $material_gpx = $cf->{material}->{gpx};
-my $material_img = $cf->{material}->{img};
-
-#
-# 変換パラメータ
-#
+# conversion parameters
 our %param = (
   line_style => 13,
   line_size => 3,
@@ -41,18 +24,24 @@ our %param = (
   xt_error => 0.005, # allowable cross-track error in kilometer
 );
 
-#
-# コマンド行オプション
-#
+# load configuration file
+my $cf = Config::Tiny->read('config.ini');
+my $content = $cf->{_}->{content};
+my $material_gpx = $cf->{material}->{gpx};
+my $material_img = $cf->{material}->{img};
+
+# parse command line argument
 if ($#ARGV < 0) {
   my $script = basename($0);
-  print STDERR "Usage: $script <CID>\n";
-  exit 1;
+  die "Usage: $script <CID>";
 }
-my $cid = $ARGV[0]; # コンテントID
+my $cid = $ARGV[0]; # content ID
 
+# load resource json
 my $file = "$content/$cid.json";
-my $text = read_file($file);
+open(my $in, '<:raw', $file) or die "Can't open $file: $!";
+my $text = do { local $/; <$in> };
+close($in);
 my $resource = decode_json($text);
 
 my $xs = XML::Simple->new(
@@ -65,16 +54,15 @@ my $xs = XML::Simple->new(
 my $js = JSON->new->utf8(0); # disable UTF-8 encoding
 
 foreach my $s (@{$resource->{section}}) {
-  my $input = join(' -f ', @{$s->{gpx}});
-  my $cmd = "gpsbabel -t -i gpx -f $input -x simplify,error=$param{xt_error}k -o gpx,gpxver=1.1 -F -";
-  open(my $in, '-|', $cmd);
+  my $input = join ' -f ', @{$s->{gpx}};
+  my $cmd = "gpsbabel -r -t -i gpx -f $input -x simplify,error=$param{xt_error}k -o gpx,gpxver=1.1 -F -";
+  open(my $in, '-|', $cmd) or die "Can't execute '$cmd': $!";
   my $xml = $xs->XMLin($in);
   close($in);
   my $geojson = ToGeoJSON::convert($xml);
-  #  print $js->encode($geojson), "\n";
-  open(my $out, '>', "$content/$cid/" . $s->{routemap});
+  my $routemap = "$content/$cid/" . $s->{routemap};
+  open(my $out, '>', $routemap) or die "Can't open $routemap: $!";
   print $out $js->encode($geojson), "\n";
   close($out);
 }
-
 __END__
