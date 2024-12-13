@@ -84,11 +84,10 @@ sub get_linestring_feature {
       coordinates => []
     }
   };
-  my $i = 0;
   foreach (@{$segment->{$tag}}) { # trkpt or rtept
     my ($lon, $lat) = (0 + $_->{lon}, 0 + $_->{lat});
     update_bounding_box($lon, $lat);
-    @{$feature->{geometry}->{coordinates}[$i++]} = ($lon, $lat);
+    push @{$feature->{geometry}->{coordinates}}, [$lon, $lat];
   }
   return $feature;
 }
