@@ -38,20 +38,18 @@
 <h1>[% title %]</h1>
 [% IF date.start == date.end -%]
 <div><time datetime="[% date.start %]">[% datejp.start %]</time></div>
+<div>天気：<span style="color:red;">☀</span><span style="color:gray;">☁</span><span style="color:blue;">☂</span><span style="color:black;">☃</span></div>
 [% ELSE -%]
 <div><time datetime="[% date.start %]">[% datejp.start %]</time>〜<time datetime="[% date.end %]">[% datejp.end %]</time></div>
 [% END -%]
-[% FOREACH s IN section -%]
-[% IF loop.is_first -%]
-[% IF loop.size == 1 -%]
-<div>天気：<span style="color:red;">☀</span><span style="color:gray;">☁</span><span style="color:blue;">☂</span><span style="color:black;">☃</span></div>
-[% END -%]
 <div>メンバー：T</div>
+[% FOREACH s IN section -%]
 [% IF loop.size == 1 -%]
 <div>行程：[% s.timeline %]</div>
-<div class="routemap"><a href="routemap.html?lat=[% s.lat %]&amp;lon=[% s.lon %]&amp;zoom=[% s.zoom %]&amp;url=[% cid %]/[% s.url %]">ルート地図</a>
+<div class="routemap"><a href="[% s.routemap %]">ルート地図</a>
 GPSのログ（赤：往路、青：復路）を地理院地図に重ねて表示します。</div>
 [% END -%]
+[% IF loop.is_first -%]
 <hr>
 [% END -%]
 [% IF loop.size > 1 -%]
@@ -63,7 +61,7 @@ GPSのログ（赤：往路、青：復路）を地理院地図に重ねて表�
 <div>天気：<span style="color:red;">☀</span><span style="color:gray;">☁</span><span style="color:blue;">☂</span><span style="color:black;">☃</span></div>
 [% END -%]
 <div>行程：[% s.timeline %]</div>
-<div class="routemap"><a href="routemap.html?lat=[% s.lat %]&amp;lon=[% s.lon %]&amp;zoom=[% s.zoom %]&amp;url=[% cid %]/[% s.url %]">ルート地図</a>
+<div class="routemap"><a href="[% s.routemap %]">ルート地図</a>
 GPSのログ（赤：往路、青：復路）を地理院地図に重ねて表示します。</div>
 </div>
 [% END -%]

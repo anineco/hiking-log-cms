@@ -1,4 +1,5 @@
 #!/usr/bin/env -S perl -CA
+# mkdraft.pl - create draft html file of hiking log
 
 use strict;
 use warnings;
@@ -6,46 +7,55 @@ use utf8;
 use open qw(:utf8 :std);
 
 use Config::Tiny;
-use Data::Dumper;
-{
-  no warnings 'redefine';
-  *Data::Dumper::qquote = sub { return shift; };
-  $Data::Dumper::Useperl = 1;
-}
 use JSON;
 use Math::Trig qw(pi deg2rad);
 use Text::Xslate;
 use Time::Piece;
 
+# days of the week in Japanese
 Time::Piece::day_list(qw(日 月 火 水 木 金 土));
 
-#
-# 設定ファイルを読み込む
-#
+# load configuration file
 my $cf = Config::Tiny->read('config.ini');
 my $content = $cf->{_}->{content};
 my $material_gpx = $cf->{material}->{gpx};
 my $material_img = $cf->{material}->{img};
 
+# parse command line argument
+if ($#ARGV < 0) {
+  my $script = basename($0);
+  die "Usage: $script CID";
+}
+my $cid = $ARGV[0]; # content ID
+
+# load resource json
+my $file = "$content/$cid.json";
+open(my $in, '<:raw', $file) or die "Can't open $file: $!";
+my $text = do { local $/; <$in> };
+close($in);
+my $resource = decode_json($text);
+
+# convert start and end date to ISO8601 period
 sub datespan {
   my $date = shift;
   my ($start, $end) = ($date->{start}, $date->{end});
-  my ($s0, $s1, $s2) = split(/-/, $start);
-  my ($e0, $e1, $e2) = split(/-/, $end);
-  if ($s0 ne $e0) {
+  my ($ys, $ms, $ds) = split(/-/, $start);
+  my ($ye, $me, $de) = split(/-/, $end);
+  if ($ys ne $ye) {
     return "$start/$end";
   }
-  if ($s1 ne $e1) {
-    return "$start/$e1-$e2";
+  if ($ms ne $me) {
+    return "$start/$me-$de";
   }
-  if ($s2 ne $e2) {
-    return "$start/$e2";
+  if ($ds ne $de) {
+    return "$start/$de";
   }
   return $start;
 }
 
+# Convert start and end date object to Japanese period
 sub datejp {
-  my ($s, $e) = @_;
+  my ($s, $e) = @_; # Time::Piece object
   my ($start, $end);
   $start = sprintf '%d年%d月%d日（%s）', $s->year, $s->mon, $s->mday, $s->wdayname;
   if ($s->year ne $e->year) {
@@ -60,47 +70,45 @@ sub datejp {
   return { start => $start, end => $end };
 }
 
+# round time to nearest 5-minute interval
 sub round_time {
   my $t = shift; # Time::Piece object
   my $s = 60 * ($t->minute % 5) + $t->sec;
-  if ($s < 150 || $s == 150 && $t->minute % 2 == 0) {
-    $t -= $s;
-  } elsif ($s > 150 || $s == 150 && $t->minute % 2 == 1) {
-    $s = 300 - $s;
-    $t += $s;
+  if ($s > 150 || $s == 150 && $t->minute % 2 == 1) {
+    $t += 300;
   }
+  $t -= $s;
   return $t;
 }
 
+# create timeline
 sub gen_timeline {
   my $points = shift;
   my $ret = '';
   for (my $i = 0; $i <= $#{$points}; $i++) {
     my $p = $points->[$i];
-    my $s = Time::Piece->strptime($p->{timespan}[0], '%FT%T');
-    my $e = Time::Piece->strptime($p->{timespan}[1], '%FT%T');
     if ($i > 0) {
       $ret .= ' …';
     }
     $ret .= $p->{name};
-    my $t = round_time($i > 0 ? $s : $e);
     if (exists $p->{ele}) {
       $ret .= '(' . $p->{ele} . ')';
     }
+    my $s = round_time(Time::Piece->strptime($p->{timespan}[0], '%FT%T'));
+    my $e = round_time(Time::Piece->strptime($p->{timespan}[1], '%FT%T'));
+    my $t = $i > 0 ? $s : $e;
     $ret .= sprintf ' %d:%02d', $t->hour, $t->minute;
-    next if ($i == 0 || $i == $#{$points});
-    my $diff = $e - $s;
-    if ($diff->minutes >= 5) {
-      my $t = round_time($e);
-      $ret .= sprintf '〜%d:%02d', $t->hour, $t->minute;
+    if ($i > 0 && $i < $#{$points}) {
+      my $diff = $e - $s;
+      if ($diff->minutes >= 10) {
+        $ret .= sprintf '〜%d:%02d', $e->hour, $e->minute;
+      }
     }
   }
   return $ret;
 }
 
-#
-# 経緯度 → Webメルカトル座標
-#
+# convert latitude and longitude to Web Mercator coordinates
 sub trans {
   my ($lon, $lat) = @_;
   my $wpx = ($lon + 180) / 360;
@@ -109,21 +117,18 @@ sub trans {
   return ($wpx, $wpy);
 }
 
-#
-# ルート地図の中心座標、ズームレベル
-#
+# Calculate center coordinates and zoom level
 sub center {
-  my ($max_lon, $min_lon, $max_lat, $min_lat) = @_;
-
-# 中心座標
-  my $lat = sprintf("%.6f", 0.5 * ($max_lat + $min_lat));
+  my ($min_lon, $min_lat, $max_lon, $max_lat) = @_; # bounding box
+# center coordinates
   my $lon = sprintf("%.6f", 0.5 * ($max_lon + $min_lon));
-# Webメルカトル座標に変換
-  my @min_wp = trans($min_lon, $max_lat);
-  my @max_wp = trans($max_lon, $min_lat);
-# ズームレベルを計算
+  my $lat = sprintf("%.6f", 0.5 * ($max_lat + $min_lat));
+# zoom level
+  my @min_wp = trans($min_lon, $max_lat); # north-west corner
+  my @max_wp = trans($max_lon, $min_lat); # south-east corner
   my $wx = 256 * ($max_wp[0] - $min_wp[0]);
   my $wy = 256 * ($max_wp[1] - $min_wp[1]);
+# TODO: map size is fixed as 580 x 400 in pixel
   my $xw = 580 / $wx;
   my $yw = 400 / $wy;
   my $w = $xw < $yw ? $xw : $yw;
@@ -132,68 +137,60 @@ sub center {
   return ($lat, $lon, $zoom);
 }
 
-#
-# コマンド行オプション
-#
-if ($#ARGV < 0) {
-  my $script = basename($0);
-  print STDERR "Usage: $script <CID>\n";
-  exit 1;
+# create URL for routemap
+sub gen_routemap {
+  my $routemap = shift;
+  my $file = "$content/$cid/$routemap";
+  open(my $in, '<:raw', $file) or die "Can't open $file: $!";
+  my $text = do { local $/; <$in> };
+  close($in);
+  my $json = decode_json($text);
+  die "missing 'bbox' in $file"  unless exists $json->{bbox};
+  my ($lat, $lon, $zoom) = center(@{$json->{bbox}});
+  return "routemap.html?lat=$lat&lon=$lon&zoom=$zoom&url=$cid/$routemap";
 }
-my $cid = $ARGV[0]; # コンテントID
 
+# set photo information
 sub gen_photo {
   my $photos = shift;
   my $ret = [];
   for (my $i = 0; $i <= $#{$photos}; $i += 2) {
-    my $p = $photos->[$i];
-    my $q = $photos->[$i + 1];
-    my ($w0, $h0) = $p->{width} > $p->{height} ? (270, 180) : (180, 270);
-    my ($w1, $h1) = $q->{width} > $q->{height} ? (270, 180) : (180, 270);
+    my $p0 = $photos->[$i];
+    my $p1 = $photos->[$i + 1];
+    my ($w0, $h0) = $p0->{width} > $p0->{height} ? (270, 180) : (180, 270);
+    my ($w1, $h1) = $p1->{width} > $p1->{height} ? (270, 180) : (180, 270);
     push @$ret, {
-      base0 => $p->{hash},
-      w0 => $w0,
-      h0 => $h1,
-      cap0 => $p->{caption},
-      base1 => $q->{hash},
-      w1 => $w1,
-      h1 => $h1,
-      cap1 => $q->{caption}
+      base0 => $p0->{hash}, w0 => $w0, h0 => $h0, cap0 => $p0->{caption},
+      base1 => $p1->{hash}, w1 => $w1, h1 => $h1, cap1 => $p1->{caption}
     };
   }
   return $ret;
 }
 
+# Create section
 sub gen_section {
   my $sect = shift;
   my $ret = [];
   foreach my $s (@{$sect}) {
-    my ($lat, $lon, $zoom) = center(@{$s->{bound}});
     push @$ret, {
       title => $s->{title},
       date => $s->{date},
       timeline => gen_timeline($s->{timeline}),
-      lat => $lat,
-      lon => $lon,
-      zoom => $zoom,
-      url => $s->{routemap},
+      routemap => gen_routemap($s->{routemap}),
       photo => gen_photo($s->{photo})
     };
   }
   return $ret;
 }
 
-my $file = "$content/$cid.json";
-open my $in, '<:raw', $file or die "Can't open '$file' $!";
-my $text = do { local $/; <$in> };
-close $in;
-
-my $resource = decode_json($text);
+# set template variables
 my $s = Time::Piece->strptime($resource->{date}->{start}, '%F');
 my $e = Time::Piece->strptime($resource->{date}->{end}, '%F');
 my $now = localtime;
-
 my $vars = {
+  site_name => $cf->{template}->{site_name},
+  site_url => $cf->{template}->{site_url},
+  author_name => $cf->{template}->{author_name},
   description => 'なんとか、かんとか。',
   title => $resource->{title},
   cid => $resource->{cid},
@@ -208,6 +205,8 @@ my $vars = {
 };
 
 my $tx = Text::Xslate->new(syntax => 'TTerse', verbose => 2);
-print $tx->render('template/tozan.html', $vars);
-
+my $html = "$content/$cid.html";
+open(my $out, '>', $html) or die "Can't open '$html' $!";
+print $out $tx->render('template/tozan.html', $vars);
+close($out);
 __END__
